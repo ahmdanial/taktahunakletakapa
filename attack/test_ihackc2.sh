@@ -63,10 +63,9 @@ try() {  # name  curl-args...
 }
 
 echo "[*] trying each auth method against /api/briefings/$BRIEF :"
+try "B Authorization:Bearer (CONFIRMED)" -H "Authorization: Bearer $TOKEN"
 try "A cookie-jar      " -b "$CJ"
-try "B Authorization:Bearer" -H "Authorization: Bearer $TOKEN"
 try "C Authorization:raw " -H "Authorization: $TOKEN"
-try "D Cookie c2_session " -H "Cookie: c2_session=$TOKEN"
 
 rm -f "$CJ"
 echo
