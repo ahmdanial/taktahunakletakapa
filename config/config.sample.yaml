@@ -1,0 +1,67 @@
+# ============================================================================
+# Attack/Defense CTF farm configuration
+# Copy to config/config.yaml and edit for your event.
+# Every value can also be overridden with FARM_* environment variables,
+# e.g. FARM_SUBMIT_URL=... (see farm/config.py).
+# ============================================================================
+
+# --- Targets -----------------------------------------------------------------
+# The teams you attack. Usually every team except your own.
+# You can list IPs explicitly, or give a range template that gets expanded.
+teams:
+  # Explicit list:
+  explicit:
+    - "10.60.1.1"
+    - "10.60.2.1"
+    - "10.60.3.1"
+  # OR expand a template. {} is replaced by each id in `range`.
+  # ip_template: "10.60.{}.1"
+  # range: [1, 2, 3, 4, 5, 6, 7, 8]
+  # Never attack yourself / the gameserver:
+  skip:
+    - "10.60.1.1"      # our own team
+    - "10.60.0.1"      # gameserver / checker
+
+# --- Flag format -------------------------------------------------------------
+# Regex used to pull flags out of exploit stdout. Default matches the common
+# ECSC / ForcAD style: 31 base62 chars + "=".
+flag_regex: "[A-Z0-9]{31}="
+# How long a flag stays valid, in seconds. Flags older than this are dropped
+# from the submit queue (no point wasting submissions on expired flags).
+flag_lifetime: 300
+
+# --- Exploit farm ------------------------------------------------------------
+exploits_dir: "exploits"       # directory scanned for exploit scripts
+run_every: 30                  # seconds between full attack rounds
+exploit_timeout: 25            # kill an exploit run after this many seconds
+max_parallel: 16               # concurrent exploit processes (teams x exploits)
+# Argument passed to each exploit. The farm calls:  <exploit> <TARGET_IP>
+# and also exports TARGET / HOST / FLAG_REGEX in the environment.
+
+# --- Flag submission ---------------------------------------------------------
+submit:
+  # protocol: one of  http | tcp | dummy
+  protocol: "http"
+  interval: 10                 # seconds between submission batches
+  batch_size: 100              # max flags per submission call
+  # -- HTTP protocol settings (protocol: http) --
+  url: "http://10.60.0.1:8080/flags"
+  method: "PUT"                # PUT or POST
+  header_token: "X-Team-Token" # header name carrying the team token (optional)
+  token: "YOUR_TEAM_TOKEN"     # value for header_token
+  # -- TCP line protocol settings (protocol: tcp) --
+  host: "10.60.0.1"
+  port: 31337
+  # Some TCP checkers expect a token/handshake line before flags:
+  hello: ""                    # sent once after connect, e.g. your token
+  # Response substrings that classify an individual flag result.
+  # Matching is case-insensitive; first match wins. Used by http and tcp.
+  responses:
+    accepted:  ["accepted", "ok", "congrat", "valid"]
+    duplicate: ["already", "duplicate", "old", "yours", "own"]
+    nop:       ["nop team", "not active"]
+    invalid:   ["invalid", "wrong", "bad", "no such flag", "expired"]
+    error:     ["error", "limit", "too many", "ratelimit"]
+
+# --- Storage -----------------------------------------------------------------
+db_path: "farm.db"             # sqlite flag queue / history

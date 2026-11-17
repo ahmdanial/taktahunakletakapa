@@ -1,0 +1,17 @@
+# Runtime state — never commit flags or captured traffic
+farm.db
+farm.db-wal
+farm.db-shm
+*.db
+pcaps/
+.backups/
+*.pcap
+
+# Local config may contain your team token
+config/config.yaml
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

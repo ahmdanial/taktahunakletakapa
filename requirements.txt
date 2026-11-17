@@ -1,0 +1,3 @@
+# The farm core runs on the Python 3 standard library alone.
+# PyYAML is optional but recommended (nicer config than JSON).
+PyYAML>=6.0
