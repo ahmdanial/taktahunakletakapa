@@ -32,6 +32,56 @@ make run                   # start the full farm (attack + submit together)
 `make demo` needs no CTF — it spins up a mock vulnerable service and mock
 gameserver on localhost and runs a flag through the entire pipeline.
 
+## i-Hack AD CTF 2026 — event setup
+
+The config ships pre-filled for this event. The numbers below come from the
+participant briefing:
+
+| Setting | Value |
+|---|---|
+| Round length | 120 s (360 rounds, 12 h) |
+| Flag lifetime | 5 rounds = 10 min (`flag_lifetime: 570`, a hair early) |
+| Flag format | `[A-Z0-9]{31}=` |
+| Vulnbox IPs | `10.80.N.2` (N = team number) · also `ihack-team<N>.i-hack.online` |
+| Submit | `PUT http://flag.i-hack.online/flags`, header `X-Team-Token`, JSON array |
+| Scoreboard | https://scoreboard.i-hack.online/scoreboard (public, all day) |
+
+Services (one exploit each; ports are in `exploits/ihack_template.py`):
+
+| Service | Port | Flagstores | Difficulty |
+|---|---|---|---|
+| Car Simulator | 8500 | 2 | Medium |
+| Apothecary | 8470 | 2 | Medium |
+| IHACK C2 | 8043 | 3 | Easy |
+| DocForge | 8440 | 3 | Hard |
+| Green House | 8490 | 3 | Hard |
+
+**Two things you must set before running** (`config/config.yaml`):
+
+1. **`teams.skip`** → your own vulnbox, e.g. `10.80.16.2`. The default skip is a
+   placeholder; until you change it the farm will also attack your own box
+   (harmless but wasted). Never target the NOP box either — its flags are
+   rejected.
+2. **`submit.token`** → your team's submit token from the portal. Keep it out of
+   git; `config/config.yaml` is already git-ignored. (On the pwnbox you can
+   instead run `FARM_SUBMIT__TOKEN=... python3 -m farm run`.)
+
+**Attack data**: each round the gameserver publishes the *flag IDs* (where the
+new flag sits) via the `ihack` client. `exploits/ihack_template.py` already
+reads that feed and loops the IDs for you — you only fill in the actual
+exploit. Install the client on the pwnbox first (briefing §8) and run
+`ihack services` once to see the exact service identifiers.
+
+**Event timeline (Asia/Singapore, UTC+8)**: 10:00 vulnbox opens — patch and back
+up your own box, test exploits against yourself. **11:00 network opens — start
+the farm.** 23:00 ends. Do not attack before 11:00.
+
+**Defense, critical**: the checker hits your services every round from the
+organizers' side and must get `OK`, or you bleed SLA. When using
+`defense/firewall.sh`, always pass `CHECKERS="<checker-ip>"` so checker traffic
+is whitelisted — a firewall rule that drops the checker turns a healthy service
+`DOWN`.
+
 ## Step-by-step walkthrough
 
 Follow these in order the first time. Run everything from the repo root
@@ -87,13 +137,18 @@ python3 -m farm teams        # prints your final target list + loaded exploits
 
 ### Step 4 — Write (or drop in) an exploit
 
-An exploit is any executable file in `exploits/`. Copy a template and edit it:
+An exploit is any executable file in `exploits/`. The bundled templates are
+shipped **non-executable on purpose** so the farm ignores them until you write a
+real one. For i-Hack, copy the attack-data-aware template once per service:
 
 ```bash
-cp exploits/example_sploit.py exploits/notes_sploit.py
-$EDITOR exploits/notes_sploit.py     # set SERVICE_PORT + the actual attack
-chmod +x exploits/notes_sploit.py
+cp exploits/ihack_template.py exploits/carsim.py
+$EDITOR exploits/carsim.py            # set SERVICE + PORT, fill in exploit_one()
+chmod +x exploits/carsim.py          # <-- only now does the farm run it
 ```
+
+(`exploits/example_sploit.py` / `.sh` are simpler generic templates if you're
+not using the i-Hack attack-data feed.)
 
 Rules your exploit must follow:
 - It's called as `./exploits/notes_sploit.py <TARGET_IP>`.

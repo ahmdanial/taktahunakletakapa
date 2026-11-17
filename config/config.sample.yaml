@@ -1,67 +1,62 @@
 # ============================================================================
-# Attack/Defense CTF farm configuration
-# Copy to config/config.yaml and edit for your event.
-# Every value can also be overridden with FARM_* environment variables,
-# e.g. FARM_SUBMIT_URL=... (see farm/config.py).
+# Attack/Defense CTF farm configuration — pre-filled for i-Hack AD CTF 2026.
+# Copy to config/config.yaml and set YOUR team number + submit token.
+#
+#   cp config/config.sample.yaml config/config.yaml
+#
+# Secrets (the submit token) do NOT belong in this committed sample. Put the
+# token in config/config.yaml (git-ignored) OR pass it at runtime:
+#   FARM_SUBMIT__TOKEN=xxxx python3 -m farm run
 # ============================================================================
 
 # --- Targets -----------------------------------------------------------------
-# The teams you attack. Usually every team except your own.
-# You can list IPs explicitly, or give a range template that gets expanded.
+# i-Hack vulnboxes are numbered 10.80.N.2 (N = team number, 30 teams).
+# They are also reachable by name as ihack-team<N>.i-hack.online over the VPN.
 teams:
-  # Explicit list:
-  explicit:
-    - "10.60.1.1"
-    - "10.60.2.1"
-    - "10.60.3.1"
-  # OR expand a template. {} is replaced by each id in `range`.
-  # ip_template: "10.60.{}.1"
-  # range: [1, 2, 3, 4, 5, 6, 7, 8]
-  # Never attack yourself / the gameserver:
+  ip_template: "10.80.{}.2"
+  range: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+          16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+  # If you prefer hostnames, comment out the two lines above and use:
+  # ip_template: "ihack-team{}.i-hack.online"
+  # range: [1, 2, ... 30]
   skip:
-    - "10.60.1.1"      # our own team
-    - "10.60.0.1"      # gameserver / checker
+    - "10.80.0.2"      # <-- CHANGE: your OWN team's vulnbox (never attack it)
+    # NOP is a non-playing reference team and is closed after the network opens;
+    # its flags are always rejected. It is not on the 1..30 grid, so nothing to
+    # skip here, but never point an exploit at it.
 
-# --- Flag format -------------------------------------------------------------
-# Regex used to pull flags out of exploit stdout. Default matches the common
-# ECSC / ForcAD style: 31 base62 chars + "=".
+# --- Flag format (i-Hack: 31 uppercase alnum chars + '=') --------------------
 flag_regex: "[A-Z0-9]{31}="
-# How long a flag stays valid, in seconds. Flags older than this are dropped
-# from the submit queue (no point wasting submissions on expired flags).
-flag_lifetime: 300
+# A flag lives 5 rounds x 120s = 600s. We stop submitting a few seconds early so
+# we never waste a submission on a flag that expires in the queue.
+flag_lifetime: 570
 
 # --- Exploit farm ------------------------------------------------------------
-exploits_dir: "exploits"       # directory scanned for exploit scripts
-run_every: 30                  # seconds between full attack rounds
-exploit_timeout: 25            # kill an exploit run after this many seconds
-max_parallel: 16               # concurrent exploit processes (teams x exploits)
-# Argument passed to each exploit. The farm calls:  <exploit> <TARGET_IP>
-# and also exports TARGET / HOST / FLAG_REGEX in the environment.
+exploits_dir: "exploits"
+run_every: 60          # new flags land every 120s round; 60s catches up fast
+exploit_timeout: 20    # keep exploits well under the checker's 25-30s timeout
+max_parallel: 30       # 29 targets x 5 services; light HTTP calls
 
-# --- Flag submission ---------------------------------------------------------
+# --- Flag submission (i-Hack gameserver) -------------------------------------
+# PUT http://flag.i-hack.online/flags  with header  X-Team-Token: <token>
+# body = JSON array of flag strings. Reachable only from the pwnbox after 11:00.
 submit:
-  # protocol: one of  http | tcp | dummy
   protocol: "http"
-  interval: 10                 # seconds between submission batches
-  batch_size: 100              # max flags per submission call
-  # -- HTTP protocol settings (protocol: http) --
-  url: "http://10.60.0.1:8080/flags"
-  method: "PUT"                # PUT or POST
-  header_token: "X-Team-Token" # header name carrying the team token (optional)
-  token: "YOUR_TEAM_TOKEN"     # value for header_token
-  # -- TCP line protocol settings (protocol: tcp) --
-  host: "10.60.0.1"
-  port: 31337
-  # Some TCP checkers expect a token/handshake line before flags:
-  hello: ""                    # sent once after connect, e.g. your token
-  # Response substrings that classify an individual flag result.
-  # Matching is case-insensitive; first match wins. Used by http and tcp.
+  interval: 10
+  batch_size: 100
+  url: "http://flag.i-hack.online/flags"
+  method: "PUT"
+  header_token: "X-Team-Token"
+  token: "PUT_YOUR_SUBMIT_TOKEN_HERE"   # or set FARM_SUBMIT__TOKEN in the env
+  # i-Hack name the outcome in the response ("too old / your own / malformed /
+  # already paid / NOP"). These substrings classify each one. After your first
+  # real submission, tweak these to match the exact words the gameserver uses.
   responses:
-    accepted:  ["accepted", "ok", "congrat", "valid"]
-    duplicate: ["already", "duplicate", "old", "yours", "own"]
-    nop:       ["nop team", "not active"]
-    invalid:   ["invalid", "wrong", "bad", "no such flag", "expired"]
-    error:     ["error", "limit", "too many", "ratelimit"]
+    accepted:  ["accepted", "ok", "congrat", "valid", "new"]
+    duplicate: ["already", "duplicate", "own", "yours", "paid", "nop"]
+    nop:       ["nop"]
+    invalid:   ["invalid", "malformed", "bad", "wrong", "old", "expired", "no such"]
+    error:     ["error", "limit", "too many", "ratelimit", "try again", "retry"]
 
 # --- Storage -----------------------------------------------------------------
-db_path: "farm.db"             # sqlite flag queue / history
+db_path: "farm.db"
