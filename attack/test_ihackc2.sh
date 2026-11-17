@@ -10,11 +10,32 @@
 set -uo pipefail
 
 IP="${1:-10.80.14.2}"
-BRIEF="${2:-a2319bef-0c2c-450c-adb5-af1f393bcebf}"
-NOTE="${3:-58904052-869e-4caa-b506-1f5a8a81bb4d}"
+BRIEF="${2:-}"
+NOTE="${3:-}"
 B="http://$IP:8043"
 CJ="$(mktemp)"
 FLAG_RE='[A-Z0-9]{31}='
+UUID='[0-9a-fA-F-]\{36\}'
+
+# Auto-fetch fresh ids from the ihack attack-data feed if not passed as args.
+if [[ -z "$BRIEF" || -z "$NOTE" ]]; then
+  TEAM="$(printf '%s' "$IP" | grep -oE '[0-9]+' | sed -n '3p')"   # 10.80.N.2 -> N
+  echo "[*] fetching fresh ids for team $TEAM from ihack attack-info..."
+  for SLUG in "${IHACK_SERVICE:-c2}" c2 ihackc2 ihack-c2; do
+    DUMP="$(ihack attack-info "$SLUG" "$TEAM" 2>/dev/null)"
+    [[ -z "$DUMP" ]] && DUMP="$(ihack attack-info "$SLUG" 2>/dev/null | grep "$IP")"
+    [[ -n "$DUMP" ]] && { echo "    (slug: $SLUG)"; break; }
+  done
+  [[ -z "$BRIEF" ]] && BRIEF="$(printf '%s' "$DUMP" | grep -o "\"brief\":\"$UUID\"" | head -1 | grep -oE "$UUID")"
+  [[ -z "$NOTE"  ]] && NOTE="$(printf '%s' "$DUMP" | grep -o "\"note\":\"$UUID\""  | head -1 | grep -oE "$UUID")"
+  echo "    brief=$BRIEF"
+  echo "    note =$NOTE"
+  if [[ -z "$BRIEF" && -z "$NOTE" ]]; then
+    echo "[-] could not fetch ids. Run 'ihack services' for the slug, or pass ids:"
+    echo "    ./attack/test_ihackc2.sh $IP <brief_id> <note_id>"
+    exit 1
+  fi
+fi
 
 echo "[*] target $B"
 echo "[*] register response:"
