@@ -32,6 +32,133 @@ make run                   # start the full farm (attack + submit together)
 `make demo` needs no CTF — it spins up a mock vulnerable service and mock
 gameserver on localhost and runs a flag through the entire pipeline.
 
+## Step-by-step walkthrough
+
+Follow these in order the first time. Run everything from the repo root
+(`taktahunakletakapa/`).
+
+### Step 1 — Install and create your config
+
+```bash
+make setup
+```
+
+This installs PyYAML, copies `config/config.sample.yaml` to
+`config/config.yaml` (only if it doesn't already exist), and marks all the
+scripts executable. If you don't have `make`, do it by hand:
+
+```bash
+pip install -r requirements.txt
+cp config/config.sample.yaml config/config.yaml
+chmod +x exploits/* attack/*.sh attack/*.py defense/*.sh
+```
+
+### Step 2 — Prove it works (sanity check)
+
+Before touching real settings, confirm the machinery runs:
+
+```bash
+make demo
+```
+
+Expect it to end with `DEMO PASS: 1 flag(s) accepted end-to-end`. If that
+works, any later problem is in your config or exploit, not the farm.
+
+### Step 3 — Edit the config for your event
+
+Open `config/config.yaml` and set:
+
+- **`teams`** — the IPs you attack. Either list them under `explicit:`, or use
+  `ip_template: "10.60.{}.1"` + `range: [1,2,3,...]` to generate them.
+- **`teams.skip`** — your own team IP and the gameserver/checker IP. Never
+  attack these.
+- **`flag_regex`** — the flag format for your CTF (the default matches 31
+  chars + `=`). The organizers always publish this.
+- **`submit`** — how flags are submitted:
+  - `protocol: http` → set `url`, `method`, and usually `header_token` + `token`.
+  - `protocol: tcp` → set `host`, `port`, and `hello` if a token line is needed.
+  - `responses:` → the words the gameserver uses for accepted/duplicate/invalid.
+
+Check what the farm parsed:
+
+```bash
+python3 -m farm teams        # prints your final target list + loaded exploits
+```
+
+### Step 4 — Write (or drop in) an exploit
+
+An exploit is any executable file in `exploits/`. Copy a template and edit it:
+
+```bash
+cp exploits/example_sploit.py exploits/notes_sploit.py
+$EDITOR exploits/notes_sploit.py     # set SERVICE_PORT + the actual attack
+chmod +x exploits/notes_sploit.py
+```
+
+Rules your exploit must follow:
+- It's called as `./exploits/notes_sploit.py <TARGET_IP>`.
+- It prints any flags it finds to stdout (the farm scrapes them with
+  `flag_regex`).
+- It finishes quickly (well under `exploit_timeout` seconds).
+
+Test it by hand against one target before trusting the farm with it:
+
+```bash
+./exploits/notes_sploit.py 10.60.2.1
+```
+
+To temporarily disable a broken exploit without deleting it, rename it to end
+in `.disabled`.
+
+### Step 5 — Do a single dry round
+
+```bash
+python3 -m farm once         # one attack round + one submit round, then exits
+python3 -m farm stats        # how many flags were queued / accepted / rejected
+```
+
+Tip: set `submit.protocol: dummy` in the config first if you want to see which
+flags *would* be submitted without actually sending them.
+
+### Step 6 — Run the farm for the whole game
+
+```bash
+make run                     # = python3 -m farm run  (attack loop + submit loop)
+```
+
+Leave it running. It attacks every `run_every` seconds and submits every
+`submit.interval` seconds. Watch another terminal with:
+
+```bash
+watch -n5 python3 -m farm stats
+```
+
+Stop it with `Ctrl-C`; the queue is saved in `farm.db`, so restarting never
+loses or re-submits flags.
+
+### Step 7 (optional) — Recon and manual flags
+
+```bash
+./attack/recon.sh                                   # open ports per team
+curl -s http://10.60.2.1:5000/dump | ./attack/flagscan.py --enqueue --target 10.60.2.1
+```
+
+`flagscan.py --enqueue` pushes hand-collected flags into the same queue, so the
+running farm submits them for you.
+
+### Step 8 (optional) — Defense
+
+On the box running your own services:
+
+```bash
+./defense/backup.sh save notes /srv/notes      # snapshot now; restore after a wipe
+sudo ./defense/capture.sh 5000                 # record attacker traffic to a pcap
+sudo ./defense/leakwatch.sh 5000               # alert when a flag leaves the wire
+sudo CHECKERS="10.60.0.1" ./defense/firewall.sh block 10.60.2.1
+```
+
+See the **Defense helpers** section below for what each one is for.
+
 ## How the farm works
 
 ```
